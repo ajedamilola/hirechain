@@ -62,6 +62,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
           [lib.HederaChainId.Testnet, lib.HederaChainId.Mainnet]
         );
 
+        connector.init({ logger: "error" })
+
         setDAppConnector(connector);
       } catch (error) {
         console.error("Failed to load Hedera Wallet Connect:", error);
