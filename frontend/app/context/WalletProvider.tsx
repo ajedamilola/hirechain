@@ -11,6 +11,7 @@ import { LedgerId } from "@hashgraph/sdk";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useStore } from "@/store/auth.store";
+import { DAppConnector, HederaChainId, HederaJsonRpcMethod, HederaSessionEvent } from "@hashgraph/hedera-wallet-connect"
 
 interface WalletContextType {
   isConnected: boolean;
@@ -40,7 +41,6 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   useEffect(() => {
     const loadHederaLib = async () => {
       try {
-        const lib = await import("@hashgraph/hedera-wallet-connect");
 
         const metadata = {
           name: "Wallet Integration - Hedera",
@@ -49,16 +49,16 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
           icons: ["https://avatars.githubusercontent.com/u/31002956"]
         };
 
-        const connector = new lib.DAppConnector(
+        const connector = new DAppConnector(
           metadata,
           LedgerId.TESTNET,
           "8b1d72155f7f6e5b5a91a64b21e384fe",
-          Object.values(lib.HederaJsonRpcMethod),
+          Object.values(HederaJsonRpcMethod),
           [
-            lib.HederaSessionEvent.ChainChanged,
-            lib.HederaSessionEvent.AccountsChanged
+            HederaSessionEvent.ChainChanged,
+            HederaSessionEvent.AccountsChanged,
           ],
-          [lib.HederaChainId.Testnet, lib.HederaChainId.Mainnet]
+          [HederaChainId.Testnet, HederaChainId.Mainnet]
         );
 
         setDAppConnector(connector);
