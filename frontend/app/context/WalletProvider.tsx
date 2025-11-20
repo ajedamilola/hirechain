@@ -11,7 +11,6 @@ import { LedgerId } from "@hashgraph/sdk";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useStore } from "@/store/auth.store";
-import { DAppConnector, HederaChainId, HederaJsonRpcMethod, HederaSessionEvent } from "@hashgraph/hedera-wallet-connect"
 
 interface WalletContextType {
   isConnected: boolean;
@@ -41,24 +40,26 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   useEffect(() => {
     const loadHederaLib = async () => {
       try {
+        const lib = await import("@hashgraph/hedera-wallet-connect");
 
         const metadata = {
-          name: "Wallet Integration - Hedera",
-          description: "Hedera DAppConnector Context Example",
+          name: "Hirechain",
+          description: "Decentralized Job matching",
           url: window.location.origin,
           icons: ["https://avatars.githubusercontent.com/u/31002956"]
         };
 
-        const connector = new DAppConnector(
+        console.log("Tring to load")
+        const connector = new lib.DAppConnector(
           metadata,
           LedgerId.TESTNET,
           "8b1d72155f7f6e5b5a91a64b21e384fe",
-          Object.values(HederaJsonRpcMethod),
+          Object.values(lib.HederaJsonRpcMethod),
           [
-            HederaSessionEvent.ChainChanged,
-            HederaSessionEvent.AccountsChanged,
+            lib.HederaSessionEvent.ChainChanged,
+            lib.HederaSessionEvent.AccountsChanged
           ],
-          [HederaChainId.Testnet, HederaChainId.Mainnet]
+          [lib.HederaChainId.Testnet, lib.HederaChainId.Mainnet]
         );
 
         setDAppConnector(connector);
