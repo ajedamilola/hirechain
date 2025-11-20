@@ -9,9 +9,12 @@ const nextConfig = {
   images: {
     unoptimized: true
   },
-  // Empty turbopack config to silence the warning
-  turbopack: {},
+  minimize: false,
+  experimental: {
+    appDir: false,
+  },
   transpilePackages: ["@hashgraph/hedera-wallet-connect", "@hashgraph/sdk"],
+
   async rewrites() {
     return [
       {

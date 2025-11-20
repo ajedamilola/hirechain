@@ -1,17 +1,21 @@
 "use client";
+
 import React, {
   createContext,
   useContext,
   useEffect,
   useState,
   useCallback,
-  ReactNode
+  ReactNode,
 } from "react";
 import { LedgerId } from "@hashgraph/sdk";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useStore } from "@/store/auth.store";
 
+// ---------------------------------------------------------
+// Context Types
+// ---------------------------------------------------------
 interface WalletContextType {
   isConnected: boolean;
   isLoading: boolean;
@@ -28,94 +32,101 @@ interface WalletProviderProps {
   children: ReactNode;
 }
 
+// ---------------------------------------------------------
+// Provider
+// ---------------------------------------------------------
 export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [dAppConnector, setDAppConnector] = useState<any>(null);
+  const [hederaLib, setHederaLib] = useState<any>(null);
 
   const router = useRouter();
   const { setAuthenticatedAccountId, fetchFullUserData, logout } = useStore();
 
-  // Load Hedera Wallet Connect library (CLIENT-SIDE ONLY)
+  // ---------------------------------------------------------
+  // Load Hedera dynamically in the BROWSER ONLY
+  // ---------------------------------------------------------
   useEffect(() => {
-    const loadHederaLib = async () => {
+    const load = async () => {
+      if (typeof window === "undefined") return;
+
       try {
+        console.log("Loading Hedera Wallet Connect...");
         const lib = await import("@hashgraph/hedera-wallet-connect");
-
-        const metadata = {
-          name: "Hirechain",
-          description: "Decentralized Job matching",
-          url: window.location.origin,
-          icons: ["https://avatars.githubusercontent.com/u/31002956"]
-        };
-
-        console.log("Tring to load")
-        const connector = new lib.DAppConnector(
-          metadata,
-          LedgerId.TESTNET,
-          "8b1d72155f7f6e5b5a91a64b21e384fe",
-          Object.values(lib.HederaJsonRpcMethod),
-          [
-            lib.HederaSessionEvent.ChainChanged,
-            lib.HederaSessionEvent.AccountsChanged
-          ],
-          [lib.HederaChainId.Testnet, lib.HederaChainId.Mainnet]
-        );
-
-        connector.init({ logger: "error" })
-
-        setDAppConnector(connector);
-      } catch (error) {
-        console.error("Failed to load Hedera Wallet Connect:", error);
-        toast.error("Failed to initialize wallet connector");
+        setHederaLib(lib); // store library instance
+        console.log("Hedera Wallet lib loaded.");
+      } catch (err) {
+        console.error("Failed to dynamically import Hedera:", err);
+        toast.error("Failed to load Hedera wallet connector");
       }
     };
 
-    loadHederaLib();
+    load();
   }, []);
 
-  // Initialize connector and restore session
+  // ---------------------------------------------------------
+  // Initialize connector when lib becomes available
+  // ---------------------------------------------------------
   useEffect(() => {
-    if (!dAppConnector) return;
-
     const initConnector = async () => {
+      if (!hederaLib) return;
       try {
-        await dAppConnector.init({ logger: "error" });
-        await dAppConnector.connect((uri: string) => {
-          // console.log("WalletConnect URI:", uri);
-        });
+        console.log("Initializing DAppConnector...");
 
-        const signer = dAppConnector.signers?.[0];
+        const metadata = {
+          name: "Hirechain",
+          description: "Decentralized Job Matching",
+          url: window.location.origin,
+          icons: ["https://avatars.githubusercontent.com/u/31002956"],
+        };
+
+        const connector = new hederaLib.DAppConnector(
+          metadata,
+          LedgerId.TESTNET,
+          "8b1d72155f7f6e5b5a91a64b21e384fe",
+          Object.values(hederaLib.HederaJsonRpcMethod),
+          [
+            hederaLib.HederaSessionEvent.ChainChanged,
+            hederaLib.HederaSessionEvent.AccountsChanged,
+          ],
+          [hederaLib.HederaChainId.Testnet, hederaLib.HederaChainId.Mainnet]
+        );
+
+        await connector.init({ logger: "error" });
+        setDAppConnector(connector);
+
+        const signer = connector.signers?.[0];
         if (signer) {
           const account = signer.getAccountId().toString();
           setAuthenticatedAccountId(account);
           setIsConnected(true);
-
-          // Fetch full user data including stats and gigs
           await fetchFullUserData(account);
         }
       } catch (err) {
-        console.error("Error initializing DAppConnector:", err);
+        console.error("Error initializing connector:", err);
       }
     };
 
     initConnector();
-  }, [dAppConnector, setAuthenticatedAccountId, fetchFullUserData]);
+  }, [hederaLib, setAuthenticatedAccountId, fetchFullUserData]);
 
+  // ---------------------------------------------------------
+  // Connect wallet
+  // ---------------------------------------------------------
   const connectWallet = useCallback(async () => {
-    if (!dAppConnector) {
-      toast.error("Wallet connector not initialized");
-      return;
-    }
-
     try {
+      if (!dAppConnector) {
+        toast.info("Wallet is still initializing...");
+        return;
+      }
+
       setIsLoading(true);
       await dAppConnector.openModal();
 
       const signer = dAppConnector.signers?.[0];
       if (!signer) {
-        console.warn("No signer found after connection");
-        toast.error("No wallet signer found");
+        toast.error("No signer found");
         return;
       }
 
@@ -123,15 +134,11 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       setAuthenticatedAccountId(account);
       setIsConnected(true);
 
-      // Fetch full user data
       const userData = await fetchFullUserData(account);
-
       if (userData) {
-        // console.log("User connected:", userData.profile.name);
         router.push("/dashboard");
         toast.success("Wallet connected successfully");
       } else {
-        // User not found, redirect to registration
         router.push("/register");
         toast.info("Please complete your profile");
       }
@@ -143,30 +150,30 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
     }
   }, [dAppConnector, router, setAuthenticatedAccountId, fetchFullUserData]);
 
+  // ---------------------------------------------------------
+  // Disconnect wallet
+  // ---------------------------------------------------------
   const disconnectWallet = useCallback(async () => {
     if (!dAppConnector) return;
 
     try {
       setIsLoading(true);
       await dAppConnector.disconnect();
-
-      setIsConnected(false);
       logout();
-
+      setIsConnected(false);
       toast.success("Wallet disconnected");
-
-      // Reload to clear any cached state
-      if (typeof window !== "undefined") {
-        window.location.href = "/login";
-      }
+      window.location.href = "/login";
     } catch (err) {
-      console.error("Error disconnecting wallet:", err);
+      console.error("Wallet disconnect error:", err);
       toast.error("Failed to disconnect wallet");
     } finally {
       setIsLoading(false);
     }
   }, [dAppConnector, logout]);
 
+  // ---------------------------------------------------------
+  // Sign + execute
+  // ---------------------------------------------------------
   const signAndExecuteTx = useCallback(
     async (transactionList: string) => {
       if (!isConnected || !dAppConnector) {
@@ -174,30 +181,21 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
       }
 
       const signer = dAppConnector.signers?.[0];
-      if (!signer) {
-        throw new Error("No signer available");
-      }
+      if (!signer) throw new Error("No signer available");
 
       const accountId = signer.getAccountId().toString();
-      const params = {
-        signerAccountId: accountId,
-        transactionList
-      };
+      const params = { signerAccountId: accountId, transactionList };
 
       try {
         const tx = await dAppConnector.signAndExecuteTransaction(params);
-        // console.log("Transaction result:", tx.result);
         return tx.result;
       } catch (err) {
-        console.error("Transaction execution failed:", err);
+        console.error("Transaction failed:", err);
         throw err;
       }
     },
     [isConnected, dAppConnector]
   );
-
-  const getSigner = () => dAppConnector?.signers?.[0];
-  const getConnector = () => dAppConnector;
 
   return (
     <WalletContext.Provider
@@ -207,8 +205,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
         connectWallet,
         disconnectWallet,
         signAndExecuteTx,
-        getSigner,
-        getConnector
+        getSigner: () => dAppConnector?.signers?.[0],
+        getConnector: () => dAppConnector,
       }}
     >
       {children}
@@ -216,10 +214,13 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({ children }) => {
   );
 };
 
+// ---------------------------------------------------------
+// Hook
+// ---------------------------------------------------------
 export const useWallet = (): WalletContextType => {
-  const context = useContext(WalletContext);
-  if (!context) {
-    throw new Error("useWallet must be used within a WalletProvider");
+  const ctx = useContext(WalletContext);
+  if (!ctx) {
+    throw new Error("useWallet must be used inside WalletProvider");
   }
-  return context;
+  return ctx;
 };
